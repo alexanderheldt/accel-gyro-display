@@ -1,48 +1,35 @@
 # https://gist.github.com/triffid/b4ccdc0bd00c6ef5d79355aafcb19766
 PROJECT:=accel-gyro-display
 
-CLOCK=8000000L
+CLOCK=16000000L
 MCU_TARGET=attiny85
 ATTINY = /home/alex/code/hobby/avr/ATTinyCore/avr
-ATTINY_VARIANT = $(ATTINY)/variants/tinyX5
-ATTINY_CORE = $(ATTINY)/cores/tiny
-LIBS = $(ATTINY)/libraries
-
 AVRDUDECONF = $(ATTINY)/avrdude.conf
 
 PROGID = stk500v1
 PROGPORT = /dev/ttyACM0
 PROGBAUD = 19200
 
-O:=build
-
 AVRDUDE=avrdude
+AVRSIZE=avr-size
 AS=avr-gcc
 CC=avr-gcc
 CXX=avr-g++
 LD=avr-g++
 
-SRCPATHS=$(ATTINY_CORE) $(ATTINY_VARIANT) \
-	 $(LIBS)/SoftwareSerial
-
 CFLAGS+=-Os
 CFLAGS+=-DF_CPU=$(CLOCK)
 CFLAGS+=-mmcu=$(MCU_TARGET)
 CFLAGS+=-funsigned-char -fno-stack-protector
-CFLAGS+=-ffunction-sections -fdata-sections -Wl,--gc-sections
+#CFLAGS+=-ffunction-sections -fdata-sections -Wl,--gc-sections -lm
+CFLAGS+=-ffunction-sections -fdata-sections -Wl,--gc-sections,-u,vfprintf -lprintf_flt -lm
 CFLAGS+=$(patsubst %,-I%,$(SRCPATHS))
 
-VPATH=$(foreach dir,$(SRCPATHS),$(shell find -H $(dir) -type d))
+OBJS=	$(patsubst %.cpp,$(O)/%.cpp.o, $(wildcard *.cpp)) \
+	$(patsubst %.c,$(O)/%.c.o, $(wildcard *.c)) \
+	$(patsubst %.S,$(O)/%.S.o, $(wildcard *.S))
 
-CXXSRC=$(wildcard *.cpp) $(foreach dir,$(SRCPATHS),$(shell find -H $(dir) -name '*.cpp'))
-CSRC=$(wildcard *.c) $(foreach dir,$(SRCPATHS),$(shell find -H $(dir) -name '*.c'))
-ASRC=$(wildcard *.S) $(foreach dir,$(SRCPATHS),$(shell find -H $(dir) -name '*.S'))
-
-OBJS=	$(patsubst %.cpp,$(O)/%.cpp.o, $(notdir $(CXXSRC))) \
-	$(patsubst %.c,$(O)/%.c.o, $(notdir $(CSRC))) \
-	$(patsubst %.S,$(O)/%.S.o, $(notdir $(ASRC)))
-
-OBJ=$(patsubst $(O)/main.cpp.o,,$(OBJS))
+O:=build
 
 .PHONY: all clean flash
 
@@ -61,9 +48,10 @@ $(O):
 	@echo "  HEX   "  "$@"
 	@$(PREFIX)objcopy -j .text -j .data -O ihex $< $@
 
-$(O)/$(PROJECT).elf: $(OBJ) | $(O)
+$(O)/$(PROJECT).elf: $(OBJS) | $(O)
 	@echo "  LINK  " "$@"
 	@$(LD) $(CFLAGS) -o $@ $^
+	@$(AVRSIZE) -C --mcu=${MCU_TARGET} $@
 
 $(O)/%.cpp.o: %.cpp | $(O)
 	@echo "  CXX   " "$@"
